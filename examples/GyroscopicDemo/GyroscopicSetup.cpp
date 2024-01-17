@@ -2,6 +2,18 @@
 
 #include "../CommonInterfaces/CommonRigidBodyBase.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#ifndef M_PI_2
+#define M_PI_2 1.57079632679489661923
+#endif
+
+#ifndef M_PI_4
+#define M_PI_4 0.785398163397448309616
+#endif
+
 struct GyroscopicSetup : public CommonRigidBodyBase
 {
 	GyroscopicSetup(struct GUIHelperInterface* helper);
@@ -54,33 +66,49 @@ void GyroscopicSetup::initPhysics()
 		btVector3(5, 8, 4),
 	};
 
+	// GYRATION
+	m_dynamicsWorld->setGravity(btVector3(0, -10, 0));
 	for (int i = 0; i < 4; i++)
 	{
-		btCylinderShapeZ* pin = new btCylinderShapeZ(btVector3(0.1, 0.1, 0.2));
-		btBoxShape* box = new btBoxShape(btVector3(1, 0.1, 0.1));
-		box->setMargin(0.01);
-		pin->setMargin(0.01);
-		btCompoundShape* compound = new btCompoundShape();
-		compound->addChildShape(btTransform::getIdentity(), pin);
-		btTransform offsetBox(btMatrix3x3::getIdentity(), btVector3(0, 0, 0.2));
-		compound->addChildShape(offsetBox, box);
-		btScalar masses[2] = {0.3, 0.1};
-		btVector3 localInertia;
-		btTransform principal;
-		compound->calculatePrincipalAxisTransform(masses, principal, localInertia);
+		btScalar CUBE_HALF_EXTENTS = 1.0f;
+		btBoxShape* box = new btBoxShape(btVector3(CUBE_HALF_EXTENTS, CUBE_HALF_EXTENTS, CUBE_HALF_EXTENTS));
+		m_collisionShapes.push_back(box);
+		float mass = 1.f;
 
-		btRigidBody* body = new btRigidBody(1, 0, compound, localInertia);
+		btScalar angle = atan2(1.0f, sqrt(2.0f));
+		btVector3 axis = btVector3(-1.0f, 0.0f, 0.0f);
+		btQuaternion rot1 = btQuaternion(0.0f, 0.0f, M_PI_4);
+		btQuaternion rot2 = btQuaternion(axis, angle);
+		float degrees = 30.0f;
+		angle = degrees / 180.0f * M_PI;
+		axis = btVector3(0.0f, 0.0f, 1.0f);
+		btQuaternion rot3 = btQuaternion(axis, angle);
+		
+
+		btVector3 localInertia{1,1,1};
+		btRigidBody* body = new btRigidBody(1, 0, box, localInertia);
 		btTransform tr;
 		tr.setIdentity();
 		tr.setOrigin(positions[i]);
+		tr.setRotation(rot3*rot2*rot1);
 		body->setCenterOfMassTransform(tr);
-		body->setAngularVelocity(btVector3(0, 0.1, 10));  //51));
-		//body->setLinearVelocity(btVector3(3, 0, 0));
-		body->setFriction(btSqrt(1));
+
+		tr.setIdentity();
+		tr.setRotation(rot3);
+		btVector3 angular_velocity = tr * btVector3(0, 20, 0);
+		body->setAngularVelocity(angular_velocity);
+
+		//body->setFriction(btSqrt(1));
 		m_dynamicsWorld->addRigidBody(body);
 		body->setFlags(gyroflags[i]);
 		m_dynamicsWorld->getSolverInfo().m_maxGyroscopicForce = 10.f;
-		body->setDamping(0.0000f, 0.000f);
+		body->setDamping(0.0000f, 0.000f); 
+
+		btVector3 pivot(-CUBE_HALF_EXTENTS, -CUBE_HALF_EXTENTS, -CUBE_HALF_EXTENTS);
+		btTypedConstraint* p2p = new btPoint2PointConstraint(*body, pivot);
+
+		m_dynamicsWorld->addConstraint(p2p);
+		p2p->setDbgDrawSize(btScalar(5.f));
 	}
 
 	{
